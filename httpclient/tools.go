@@ -17,7 +17,7 @@ type header struct {
 }
 
 var generalHeaders = [...]header{
-	{"Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9"},
+	{"Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"},
 	{"Accept-Encoding", "gzip"},
 	{"Accept-Language", "zh-CN,zh;q=0.9"},
 	{"Connection", "keep-alive"},
@@ -51,11 +51,11 @@ func getWithContext(ctx context.Context, url string) (*http.Request, error) {
 	return req, err
 }
 
-var asciiSpace = [256]uint8{'\t': 1, '\n': 1, '\v': 1, '\f': 1, '\r': 1, ' ': 1}
+var isAsciiSpace = [256]bool{'\t': true, '\n': true, '\v': true, '\f': true, '\r': true, ' ': true}
 
 func trimSuffixSpace(data []byte) []byte {
 	start := 0
-	for start < len(data) && asciiSpace[data[start]] == 1 {
+	for start < len(data) && isAsciiSpace[data[start]] {
 		start++
 	}
 	return data[start:]
@@ -63,13 +63,11 @@ func trimSuffixSpace(data []byte) []byte {
 
 // scanLine scan a line
 func scanLine(reader *bufio.Reader) (string, error) {
-
 	data, isPrefix, err := reader.ReadLine() // data is not a copy, use it carefully
 	res := string(trimSuffixSpace(data))     // copy the data to string(remove the leading space)
-	for isPrefix {
+	for isPrefix {                           // discard the remaining runes in the line
 		_, isPrefix, err = reader.ReadLine()
 	}
-
 	return res, err
 }
 
@@ -102,29 +100,30 @@ func (r *resReader) Close() error {
 // responseReader provide the response reader,
 // if occur an error, it will close the response.Body
 func responseReader(res *http.Response) (io.ReadCloser, error) {
-	var err error
-	defer func() {
-		if err != nil {
-			res.Body.Close()
-		}
-	}()
-	var r io.ReadCloser
-	encoding := res.Header.Get("Content-Encoding")
+	var (
+		err error
+		r   io.ReadCloser
+
+		encoding = res.Header.Get("Content-Encoding")
+	)
+
 	switch encoding {
 	case "gzip":
 		var reader *gzip.Reader
-		reader, err := gzip.NewReader(res.Body)
-		if err != nil {
-			return nil, err
-		}
-		r = &resReader{
-			Reader: reader,
-			close:  []closeFunc{reader.Close, res.Body.Close},
+		reader, err = gzip.NewReader(res.Body)
+		if err == nil {
+			r = &resReader{
+				Reader: reader,
+				close:  []closeFunc{reader.Close, res.Body.Close},
+			}
 		}
 	case "":
 		r = res.Body
 	default:
-		return nil, fmt.Errorf("reader: unsupported encoding: %s", encoding)
+		err = fmt.Errorf("reader: unsupported encoding: %s", encoding)
 	}
-	return r, nil
+	if err != nil {
+		res.Body.Close()
+	}
+	return r, err
 }
