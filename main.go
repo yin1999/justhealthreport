@@ -30,22 +30,18 @@ var (
 const (
 	mailNickName    = "打卡状态推送"
 	mailConfigPath  = "email.json"
-	logPath         = `log`
-	configPath      = `config.json` // 配置文件
-	accountFileName = "account"
+	logPath         = "log"         // 日志存储目录
+	configPath      = "config.json" // 配置文件
+	accountFilename = "account"     // 账户信息存储文件名
 
 	retryAfter   = 10 * time.Minute
 	punchTimeout = 60 * time.Second
-
-	punchStart    = "Start punch\n"
-	punchFinish   = "Punch finished\n"
-	contextCancel = "Context canceled\n"
 )
 
 func main() {
 	logger, err := log.New(logPath, log.DefaultLayout)
 	if err != nil {
-		os.Stderr.WriteString(err.Error())
+		fmt.Fprintln(os.Stderr, err.Error())
 		os.Exit(1)
 	}
 	defer logger.Close()
@@ -71,8 +67,8 @@ func main() {
 	}
 
 	var account [2]string // 账户信息
-	if err = object.Load(&account, accountFileName); err == nil {
-		logger.Printf("Got account info from file '%s'\n", accountFileName)
+	if err = object.Load(&account, accountFilename); err == nil {
+		logger.Printf("Got account info from file '%s'\n", accountFilename)
 	} else {
 		if account, err = getAccount(); err != nil {
 			logger.Printf("Err: %s\n", err.Error())
@@ -80,7 +76,7 @@ func main() {
 		}
 		logger.Print("Got account info from 'Stdin'\n")
 
-		if err = object.Store(account, accountFileName); err != nil {
+		if err = object.Store(account, accountFilename); err != nil {
 			logger.Printf("Cannot save account info, err: %s\n", err.Error())
 		}
 	}
@@ -93,13 +89,7 @@ func main() {
 
 	logger.Print("正在验证账号密码\n")
 	err = client.LoginConfirm(ctx, account, punchTimeout)
-	switch err {
-	case nil:
-		break
-	case context.Canceled:
-		logger.Print(contextCancel)
-		return
-	default:
+	if err != nil {
 		logger.Printf("验证密码失败(Err: %s)\n", err.Error())
 		return
 	}
