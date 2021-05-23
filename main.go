@@ -70,7 +70,7 @@ func main() {
 	if err = object.Load(&account, accountFilename); err == nil {
 		logger.Printf("Got account info from file '%s'\n", accountFilename)
 	} else {
-		if account, err = getAccount(); err != nil {
+		if err = getAccount(&account); err != nil {
 			logger.Printf("Err: %s\n", err.Error())
 			os.Exit(1)
 		}
@@ -109,11 +109,14 @@ func main() {
 		PunchFunc:    client.Punch,
 	}
 
-	select {
-	case <-time.After(5 * time.Second):
-		serveCfg.PunchRoutine(ctx, account) // 当天打卡
-	case <-ctx.Done():
-		break
+	{
+		timer := time.NewTimer(5 * time.Second)
+		select {
+		case <-timer.C:
+		case <-ctx.Done():
+			timer.Stop()
+			return
+		}
 	}
 
 	serveCfg.PunchServe(ctx, account)
@@ -156,19 +159,21 @@ func init() {
 	}
 }
 
-func getAccount() (account [2]string, err error) {
-	for len(account[0]) == 0 && err != io.EOF { // avoid expect new line error
+func getAccount(account *[2]string) (err error) {
+	var data string
+	for len(data) == 0 && err != io.EOF { // avoid expect new line error
 		fmt.Print("输入用户名:")
-		_, err = fmt.Scanln(&account[0])
+		_, err = fmt.Scanln(&data)
 	}
 
 	var passwd []byte
-
 	for len(passwd) == 0 && err == nil {
 		fmt.Print("输入密码:")
 		passwd, err = term.ReadPassword(int(syscall.Stdin))
 		fmt.Print("\n") // print in new line
 	}
-	account[1] = string(passwd)
+	if err == nil {
+		account[0], account[1] = data, string(passwd)
+	}
 	return
 }
