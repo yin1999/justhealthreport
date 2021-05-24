@@ -21,7 +21,6 @@ func getFormData(ctx context.Context, jar customCookieJar) (form *HealthForm, co
 	if err != nil {
 		return
 	}
-	jar.SameSite(true)
 	client := http.Client{
 		Jar: jar,
 	}

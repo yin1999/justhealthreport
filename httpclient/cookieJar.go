@@ -3,85 +3,55 @@ package httpclient
 import (
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 type customCookieJar interface {
 	http.CookieJar
 	GetCookieByDomain(domain string) []*http.Cookie
-	SameSite(flag bool)
-	SetNewFilter(name []string)
-	GetCookieByName(name []string) []*http.Cookie
+	GetCookieByName(name string) []*http.Cookie
 }
 
 type cookieJar struct {
-	cookies   []*http.Cookie
-	cookieMap map[string]bool
-	sameSite  bool
+	cookies []*http.Cookie
 }
 
-// newCookieJar sameSite default to true
-func newCookieJar(name []string) customCookieJar {
-	m := make(map[string]bool, len(name))
-	for i := range name {
-		m[name[i]] = true
-	}
-	return &cookieJar{
-		cookieMap: m,
-		sameSite:  true,
-	}
+// newCookieJar return a cookiejar
+func newCookieJar() customCookieJar {
+	return &cookieJar{}
 }
 
-func (j *cookieJar) SameSite(flag bool) {
-	j.sameSite = flag
-}
-
-func (j *cookieJar) SetNewFilter(name []string) {
-	j.cookieMap = make(map[string]bool, len(name))
-	for i := range name {
-		j.cookieMap[name[i]] = true
-	}
-}
-
-func (j *cookieJar) GetCookieByName(name []string) (res []*http.Cookie) {
-	m := make(map[string]bool, len(name))
-	for i := range name {
-		m[name[i]] = true
-	}
+// GetCookieByName
+func (j *cookieJar) GetCookieByName(name string) (res []*http.Cookie) {
 	for i := range j.cookies {
-		if m[j.cookies[i].Name] {
+		if j.cookies[i].Name == name {
 			res = append(res, j.cookies[i])
 		}
 	}
 	return
 }
 
+// SetCookies set cookies to cookie storage
 func (j *cookieJar) SetCookies(u *url.URL, cookies []*http.Cookie) {
 	for i := range cookies {
-		if ok := j.cookieMap[cookies[i].Name]; ok {
+		if cookies[i].Domain == "" { // if cookie.Domain is empty, using host instead
 			cookies[i].Domain = u.Hostname()
-			j.cookies = append(j.cookies, cookies[i])
 		}
+		j.cookies = append(j.cookies, cookies[i])
 	}
 }
 
+// GetCookieByDomain use domain as filter to get cookies
 func (j *cookieJar) GetCookieByDomain(domain string) (res []*http.Cookie) {
 	for i := range j.cookies {
-		if j.cookies[i].Domain == domain {
+		if strings.HasSuffix(j.cookies[i].Domain, domain) {
 			res = append(res, j.cookies[i])
 		}
 	}
 	return
 }
 
-func (j *cookieJar) Cookies(u *url.URL) (res []*http.Cookie) {
-	if j.sameSite {
-		for i := range j.cookies {
-			if j.cookies[i].Domain == u.Hostname() {
-				res = append(res, j.cookies[i])
-			}
-		}
-	} else {
-		res = j.cookies
-	}
-	return
+// Cookies get cookie by domains
+func (j *cookieJar) Cookies(u *url.URL) []*http.Cookie {
+	return j.GetCookieByDomain(u.Hostname())
 }

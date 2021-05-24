@@ -25,7 +25,7 @@ type loginForm struct {
 
 func login(ctx context.Context, account [2]string) (j customCookieJar, err error) {
 	const loginURL = "http://ids2.just.edu.cn/cas/login"
-	jar := newCookieJar([]string{"JSESSIONID", "route", "CASTGC"})
+	jar := newCookieJar()
 	client := http.Client{
 		Jar: jar,
 	}
@@ -78,7 +78,7 @@ func login(ctx context.Context, account [2]string) (j customCookieJar, err error
 		return
 	}
 	res.Body.Close()
-	if tmp := jar.GetCookieByName([]string{"CASTGC"}); len(tmp) == 0 {
+	if tmp := jar.GetCookieByName("CASTGC"); len(tmp) == 0 {
 		err = CookieNotFoundErr{"CASTGC"}
 		return
 	}
