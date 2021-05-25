@@ -15,7 +15,7 @@ import (
 
 var ErrCannotParseData = errors.New("httpclient: cannot parse data")
 
-func getFormData(ctx context.Context, jar customCookieJar) (form *HealthForm, cookie []*http.Cookie, err error) {
+func getFormData(ctx context.Context, jar customCookieJar) (form *HealthForm, err error) {
 	var req *http.Request
 	req, err = getWithContext(ctx, "http://ehall.just.edu.cn/default/work/jkd/jkxxtb/jkxxcj.jsp")
 	if err != nil {
@@ -52,8 +52,12 @@ func getFormData(ctx context.Context, jar customCookieJar) (form *HealthForm, co
 			Ext:                  "{}", // default
 		},
 	}
-
-	filler := newFiller(&(form.Form), "fill")
+	var filler *structFiller
+	filler, err = newFiller(&(form.Form), "fill")
+	if err != nil {
+		form = nil
+		return
+	}
 	for ; ; line, _ = scanLine(reader) {
 		if line == "" {
 			continue
@@ -68,15 +72,15 @@ func getFormData(ctx context.Context, jar customCookieJar) (form *HealthForm, co
 		filler.fill(e.key, e.value)
 	}
 	if !strings.HasPrefix(line, "$('div[name=sqrid]')") {
+		form = nil
 		err = ErrCannotParseData
-		return
+	} else {
+		err = nil
 	}
-	err = nil
-	cookie = jar.GetCookieByDomain("ehall.just.edu.cn")
 	return
 }
 
-func postForm(ctx context.Context, cookie []*http.Cookie, form *HealthForm) error {
+func postForm(ctx context.Context, jar http.CookieJar, form *HealthForm) error {
 	data, err := json.Marshal(form)
 	if err != nil {
 		return err
@@ -92,11 +96,12 @@ func postForm(ctx context.Context, cookie []*http.Cookie, form *HealthForm) erro
 		return err
 	}
 	setGeneralHeader(req)
-	setCookies(req, cookie)
 	req.Header.Set("Content-Type", "text/json")
 
+	client := &http.Client{Jar: jar}
+
 	var res *http.Response
-	if res, err = http.DefaultClient.Do(req); err != nil {
+	if res, err = client.Do(req); err != nil {
 		return err
 	}
 	var reader io.ReadCloser
@@ -106,13 +111,9 @@ func postForm(ctx context.Context, cookie []*http.Cookie, form *HealthForm) erro
 	}
 	defer reader.Close()
 
-	var body []byte
-	if body, err = io.ReadAll(reader); err != nil {
-		return err
-	}
 	r := &response{}
-	json.Unmarshal(body, r)
-	if !r.Res {
+
+	if err = json.NewDecoder(reader).Decode(r); err != nil || !r.Res {
 		return errors.New("httpclient: post form failed")
 	}
 	return nil

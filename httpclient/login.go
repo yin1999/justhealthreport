@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/xml"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -53,7 +52,11 @@ func login(ctx context.Context, account [2]string) (j customCookieJar, err error
 	}
 	var element *elementInput
 	form := &loginForm{}
-	filler := newFiller(form, "fill")
+	var filler *structFiller
+	filler, err = newFiller(form, "fill")
+	if err != nil {
+		return
+	}
 	for ; strings.HasPrefix(line, "<input type=\"hidden") || line == ""; line, err = scanLine(reader) {
 		if line == "" {
 			continue
@@ -70,7 +73,7 @@ func login(ctx context.Context, account [2]string) (j customCookieJar, err error
 		return
 	}
 
-	if req, err = postWithContext(ctx, loginURL, value); err != nil {
+	if req, err = postFormWithContext(ctx, loginURL, value); err != nil {
 		return
 	}
 
@@ -116,20 +119,21 @@ type structFiller struct {
 	v reflect.Value
 }
 
-// newFiller default tag: fill
-func newFiller(item interface{}, tag string) *structFiller {
+// newFiller default tag: fill.
+// The item must be a pointer
+func newFiller(item interface{}, tag string) (*structFiller, error) {
 	v := reflect.ValueOf(item).Elem()
 	if !v.CanAddr() {
-		panic("reflect: item must be a pointer")
+		return nil, errors.New("reflect: item must be a pointer")
 	}
 	if tag == "" {
 		tag = "fill"
 	}
 	findTagName := func(t reflect.StructTag) (string, error) {
-		if tn, ok := t.Lookup(tag); ok {
+		if tn, ok := t.Lookup(tag); ok && len(tn) > 0 {
 			return strings.Split(tn, ",")[0], nil
 		}
-		return "", errors.New("reflect: not define a" + tag + "tag")
+		return "", errors.New("skip")
 	}
 	s := &structFiller{
 		m: make(map[string]int),
@@ -143,13 +147,13 @@ func newFiller(item interface{}, tag string) *structFiller {
 		}
 		s.m[name] = i
 	}
-	return s
+	return s, nil
 }
 
 func (s *structFiller) fill(key string, value interface{}) error {
 	fieldNum, ok := s.m[key]
 	if !ok {
-		return fmt.Errorf("reflect: field %s not exists", key)
+		return errors.New("reflect: field <" + key + "> not exists")
 	}
 	s.v.Field(fieldNum).Set(reflect.ValueOf(value))
 	return nil

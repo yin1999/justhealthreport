@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"compress/gzip"
 	"context"
-	"fmt"
+	"errors"
 	"io"
 	"net/http"
 	"net/url"
@@ -21,10 +21,10 @@ var generalHeaders = [...]header{
 	{"Accept-Encoding", "gzip"},
 	{"Accept-Language", "zh-CN,zh;q=0.9"},
 	{"Connection", "keep-alive"},
-	{"User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.93 Safari/537.36"},
+	{"User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.212 Safari/537.36"},
 }
 
-func postWithContext(ctx context.Context, url string, data url.Values) (*http.Request, error) {
+func postFormWithContext(ctx context.Context, url string, data url.Values) (*http.Request, error) {
 	req, err := http.NewRequestWithContext(ctx,
 		http.MethodPost,
 		url,
@@ -71,12 +71,6 @@ func scanLine(reader *bufio.Reader) (string, error) {
 	return res, err
 }
 
-func setCookies(req *http.Request, cookies []*http.Cookie) {
-	for i := range cookies {
-		req.AddCookie(cookies[i])
-	}
-}
-
 func setGeneralHeader(req *http.Request) {
 	for i := range generalHeaders {
 		req.Header.Set(generalHeaders[i].key, generalHeaders[i].value)
@@ -117,10 +111,10 @@ func responseReader(res *http.Response) (io.ReadCloser, error) {
 				close:  []closeFunc{reader.Close, res.Body.Close},
 			}
 		}
-	case "":
+	case "", "identity":
 		r = res.Body
 	default:
-		err = fmt.Errorf("reader: unsupported encoding: %s", encoding)
+		err = errors.New("reader: unsupported encoding: " + encoding)
 	}
 	if err != nil {
 		res.Body.Close()

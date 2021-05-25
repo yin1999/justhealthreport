@@ -3,7 +3,6 @@ package httpclient
 import (
 	"context"
 	"math/rand"
-	"net/http"
 	"net/url"
 	"time"
 )
@@ -42,21 +41,13 @@ func Punch(ctx context.Context, account [2]string, timeout time.Duration) (err e
 	}
 
 	var form *HealthForm
-	var cookie []*http.Cookie
-	form, cookie, err = getFormData(ctx, jar)
+	form, err = getFormData(ctx, jar)
 	if err != nil {
 		return
 	}
 
-	err = postForm(ctx, cookie, form)
+	err = postForm(ctx, jar, form)
 	return
-}
-
-// SetTimeZone 设置时区
-func SetTimeZone(tz *time.Location) {
-	if tz != nil {
-		timeZone = tz
-	}
 }
 
 // parseURLError 解析URL错误
