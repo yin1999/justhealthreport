@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -30,13 +29,9 @@ func getFormData(ctx context.Context, jar customCookieJar) (form *HealthForm, er
 		return
 	}
 
-	var body io.ReadCloser
-	if body, err = responseReader(res); err != nil {
-		return
-	}
-	defer body.Close()
+	defer res.Body.Close()
 
-	reader := bufio.NewReader(body)
+	reader := bufio.NewReader(res.Body)
 
 	var line string
 	for !strings.HasPrefix(line, "$(\"") && err == nil {
@@ -104,16 +99,11 @@ func postForm(ctx context.Context, jar http.CookieJar, form *HealthForm) error {
 	if res, err = client.Do(req); err != nil {
 		return err
 	}
-	var reader io.ReadCloser
-	reader, err = responseReader(res)
-	if err != nil {
-		return err
-	}
-	defer reader.Close()
+	defer res.Body.Close()
 
 	r := &response{}
 
-	if err = json.NewDecoder(reader).Decode(r); err != nil || !r.Res {
+	if err = json.NewDecoder(res.Body).Decode(r); err != nil || !r.Res {
 		return errors.New("httpclient: post form failed")
 	}
 	return nil

@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/xml"
 	"errors"
-	"io"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -38,13 +37,9 @@ func login(ctx context.Context, account [2]string) (j customCookieJar, err error
 	if res, err = client.Do(req); err != nil {
 		return
 	}
-	var body io.ReadCloser
-	if body, err = responseReader(res); err != nil {
-		return
-	}
-	defer body.Close()
+	defer res.Body.Close()
 
-	reader := bufio.NewReaderSize(body, 6000)
+	reader := bufio.NewReaderSize(res.Body, 6000)
 
 	var line string
 	for !strings.HasPrefix(line, "<input type=\"hidden") && err == nil {
