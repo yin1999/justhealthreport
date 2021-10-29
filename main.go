@@ -2,9 +2,10 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
+	"log"
 	"os"
 	"os/signal"
 	"runtime"
@@ -14,10 +15,8 @@ import (
 	"github.com/yin1999/healthreport/serve"
 	"github.com/yin1999/healthreport/utils/config"
 	"github.com/yin1999/healthreport/utils/email"
-	"github.com/yin1999/healthreport/utils/log"
-	"github.com/yin1999/healthreport/utils/object"
+	"github.com/yin1999/healthreport/utils/systemd"
 	client "github.com/yin1999/justhealthreport/httpclient"
-	"golang.org/x/term"
 )
 
 // build info
@@ -28,70 +27,64 @@ var (
 )
 
 const (
-	mailNickName    = "打卡状态推送"
-	mailConfigPath  = "email.json"
-	logPath         = "log"         // 日志存储目录
-	configPath      = "config.json" // 配置文件
-	accountFilename = "account"     // 账户信息存储文件名
+	mailNickName = "打卡状态推送"
 
-	retryAfter   = 10 * time.Minute
-	punchTimeout = 60 * time.Second
+	retryAfter   = 5 * time.Minute
+	punchTimeout = 30 * time.Second
+)
+
+var (
+	cfg     = config.Config{}
+	account = &client.Account{}
+
+	mailConfigPath  string
+	accountFilename string // 账户信息存储文件名
+	logger          = log.Default()
 )
 
 func main() {
-	logger, err := log.New(logPath, log.DefaultLayout)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err.Error())
-		os.Exit(1)
-	}
-	defer logger.Close()
-
 	defer logger.Print("Exit\n")
-	logger.Println("Start program.")
-
-	cfg := &config.Config{} // config
-	if err = cfg.Load(configPath); err == nil {
-		logger.Printf("Got config from file: '%s'\n", configPath)
-	} else {
-		cfg.GetFromStdin()
-		if err = cfg.Store(configPath); err != nil {
-			logger.Printf("Cannot save config, err: %s\n", err.Error())
+	logger.Print("Start program\n")
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM)
+	for {
+		ctx, cc := context.WithCancel(context.Background())
+		exit := false
+		go func() {
+			switch <-c {
+			case syscall.SIGHUP:
+				systemd.Notify(systemd.Reloading)
+				cc()
+			case syscall.SIGINT, syscall.SIGTERM:
+				systemd.Notify(systemd.Stopping)
+				exit = true
+				cc()
+			}
+		}()
+		app(ctx, func() {
+			systemd.Notify(systemd.Ready)
+		})
+		if exit {
+			break
 		}
+		initApp() // load config
 	}
+}
+
+func app(ctx context.Context, ready func()) {
 	cfg.Show(logger)
 
-	var emailCfg *email.Config
-	emailCfg, err = email.LoadConfig(mailConfigPath)
+	emailCfg, err := email.LoadConfig(mailConfigPath)
 	if err == nil {
 		logger.Print("Email deliver enabled\n")
 	}
 
-	var account [2]string // 账户信息
-	if err = object.Load(&account, accountFilename); err == nil {
-		logger.Printf("Got account info from file '%s'\n", accountFilename)
-	} else {
-		if err = getAccount(&account); err != nil {
-			logger.Printf("Err: %s\n", err.Error())
-			os.Exit(1)
-		}
-		logger.Print("Got account info from 'Stdin'\n")
-
-		if err = object.Store(account, accountFilename); err != nil {
-			logger.Printf("Cannot save account info, err: %s\n", err.Error())
-		}
-	}
-
-	fmt.Println("Ctrl+C可退出程序")
-
-	ctx, cc := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer cc()
-
 	logger.Print("正在验证账号密码\n")
 	err = client.LoginConfirm(ctx, account, punchTimeout)
 	if err != nil {
-		logger.Printf("验证密码失败(Err: %s)\n", err.Error())
-		return
+		logger.Fatalf("验证密码失败(Err: %s)\n", err.Error())
 	}
+	ready()
 	logger.Print("账号密码验证成功，将在5秒后开始打卡\n")
 
 	serveCfg := &serve.Config{
@@ -113,67 +106,106 @@ func main() {
 		timer := time.NewTimer(5 * time.Second)
 		select {
 		case <-timer.C:
+			break
 		case <-ctx.Done():
 			timer.Stop()
 			return
 		}
 	}
-
-	serveCfg.PunchServe(ctx, account)
+	err = serveCfg.PunchServe(ctx, account)
+	if err != nil && err != context.Canceled {
+		logger.Fatalln(err.Error())
+	}
 }
 
 func init() {
-	if len(os.Args) >= 2 {
-		var (
-			returnCode = 0
-			version    bool
-			checkEmail bool
-		)
+	initApp()
+}
 
-		flag.BoolVar(&version, "v", false, "show version and exit")
-		flag.BoolVar(&checkEmail, "c", false, "check email")
-		flag.Parse()
+func initApp() {
+	flagSet := flag.NewFlagSet(os.Args[0], flag.ContinueOnError)
+	version := flagSet.Bool("v", false, "show version and exit")
+	checkEmail := flagSet.Bool("e", false, "check email")
+	genEmailCfg := flagSet.Bool("g", false, "generate email config")
+	save := flagSet.Bool("save", false, "whether save config to file")
 
-		if version {
-			fmt.Printf("Program Version:        %s\n", ProgramVersion)
-			fmt.Printf("Go Version:             %s %s/%s\n", runtime.Version(), runtime.GOOS, runtime.GOARCH)
-			fmt.Printf("Build Time:             %s\n", BuildTime)
-			fmt.Printf("Program Commit ID:      %s\n", ProgramCommitID)
+	flagSet.StringVar(&account.Username, "u", "", "set username")
+	flagSet.StringVar(&account.Password, "p", "", "set password")
+	flagSet.StringVar(&mailConfigPath, "email", "email.json", "set email config file path")
+	flagSet.StringVar(&accountFilename, "account", "account.json", "set account file path(json format with keys:'username','password')")
+	cfg.SetFlag(flagSet)
+	if err := flagSet.Parse(os.Args[1:]); err != nil {
+		if err == flag.ErrHelp {
+			os.Exit(0)
+		}
+		logger.Fatalln(err.Error())
+	}
+
+	if *version {
+		fmt.Printf("Program Version:        %s\n", ProgramVersion)
+		fmt.Printf("Go Version:             %s %s/%s\n", runtime.Version(), runtime.GOOS, runtime.GOARCH)
+		fmt.Printf("Build Time:             %s\n", BuildTime)
+		fmt.Printf("Program Commit ID:      %s\n", ProgramCommitID)
+	}
+
+	if *checkEmail {
+		cfg, err := email.LoadConfig(mailConfigPath)
+		if err == nil {
+			err = cfg.LoginTest()
 		}
 
-		if checkEmail {
-			cfg, err := email.LoadConfig(mailConfigPath)
-			if err == nil {
-				err = cfg.LoginTest()
-			}
-
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "email check: failed, err: %s\n", err.Error())
-				returnCode = 1
-			} else {
-				fmt.Print("email check: pass\n")
-			}
+		if err != nil {
+			logger.Fatalf("email check: failed, err: %s\n", err.Error())
 		}
+		fmt.Print("email check: pass\n")
+	}
 
-		os.Exit(returnCode)
+	if *genEmailCfg {
+		cfg, _ := email.LoadConfig(mailConfigPath)
+		if cfg == nil {
+			cfg = email.Example()
+		}
+		if err := storeJson(cfg, mailConfigPath); err != nil {
+			logger.Fatalln(err.Error())
+		}
+	}
+
+	fromArgs := account.Username != "" || account.Password != ""
+
+	if !fromArgs {
+		err := loadJson(account, accountFilename)
+		if err != nil {
+			logger.Fatalln(err.Error())
+		}
+	}
+
+	if *save && fromArgs {
+		if err := storeJson(account, accountFilename); err != nil {
+			logger.Fatalf("account: save to file failed(Err: %s)\n", err.Error())
+		}
+	}
+
+	if *version || *checkEmail || *genEmailCfg || *save {
+		os.Exit(0)
 	}
 }
 
-func getAccount(account *[2]string) (err error) {
-	var data string
-	for len(data) == 0 && err != io.EOF { // avoid expect new line error
-		fmt.Print("输入用户名:")
-		_, err = fmt.Scanln(&data)
+func loadJson(v interface{}, name string) error {
+	f, err := os.Open(name)
+	if err != nil {
+		return err
 	}
+	defer f.Close()
+	return json.NewDecoder(f).Decode(v)
+}
 
-	var passwd []byte
-	for len(passwd) == 0 && err == nil {
-		fmt.Print("输入密码:")
-		passwd, err = term.ReadPassword(int(syscall.Stdin))
-		fmt.Print("\n") // print in new line
+func storeJson(v interface{}, name string) error {
+	f, err := os.OpenFile(name, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
+	if err != nil {
+		return err
 	}
-	if err == nil {
-		account[0], account[1] = data, string(passwd)
-	}
-	return
+	defer f.Close()
+	enc := json.NewEncoder(f)
+	enc.SetIndent("", "\t")
+	return enc.Encode(v)
 }

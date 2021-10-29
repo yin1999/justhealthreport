@@ -21,7 +21,7 @@ type loginForm struct {
 	Type     string `fill:"loginType" url:"loginType"`
 }
 
-func login(ctx context.Context, account [2]string) (j customCookieJar, err error) {
+func login(ctx context.Context, account *Account) (j customCookieJar, err error) {
 	const loginURL = "http://ids2.just.edu.cn/cas/login"
 	jar := newCookieJar()
 	client := http.Client{
@@ -37,7 +37,7 @@ func login(ctx context.Context, account [2]string) (j customCookieJar, err error
 	if res, err = client.Do(req); err != nil {
 		return
 	}
-	defer res.Body.Close()
+	defer drainBody(res.Body)
 
 	reader := bufio.NewReaderSize(res.Body, 6000)
 
@@ -61,8 +61,8 @@ func login(ctx context.Context, account [2]string) (j customCookieJar, err error
 		}
 		filler.fill(element.Key, element.Value)
 	}
-	form.Username = account[0]
-	form.Password = account[1]
+	form.Username = account.Username
+	form.Password = account.Password
 	var value url.Values
 	if value, err = query.Values(form); err != nil {
 		return
@@ -75,7 +75,7 @@ func login(ctx context.Context, account [2]string) (j customCookieJar, err error
 	if res, err = client.Do(req); err != nil {
 		return
 	}
-	res.Body.Close()
+	drainBody(res.Body)
 	if tmp := jar.GetCookieByName("CASTGC"); len(tmp) == 0 {
 		err = CookieNotFoundErr{"CASTGC"}
 		return

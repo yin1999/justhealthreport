@@ -16,16 +16,16 @@ var (
 )
 
 // LoginConfirm 验证账号密码
-func LoginConfirm(ctx context.Context, account [2]string, timeout time.Duration) error {
+func LoginConfirm(ctx context.Context, account interface{}, timeout time.Duration) error {
 	var cc context.CancelFunc
 	ctx, cc = context.WithTimeout(ctx, timeout)
-	_, err := login(ctx, account)
+	_, err := login(ctx, account.(*Account))
 	cc()
 	return parseURLError(err)
 }
 
 // Punch 打卡
-func Punch(ctx context.Context, account [2]string, timeout time.Duration) (err error) {
+func Punch(ctx context.Context, account interface{}, timeout time.Duration) (err error) {
 	var cc context.CancelFunc
 	ctx, cc = context.WithTimeout(ctx, timeout)
 	defer cc()
@@ -35,7 +35,7 @@ func Punch(ctx context.Context, account [2]string, timeout time.Duration) (err e
 	}()
 
 	var jar customCookieJar
-	jar, err = login(ctx, account)
+	jar, err = login(ctx, account.(*Account))
 	if err != nil {
 		return
 	}

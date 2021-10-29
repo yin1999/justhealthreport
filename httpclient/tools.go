@@ -3,21 +3,17 @@ package httpclient
 import (
 	"bufio"
 	"context"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
 )
 
-type header struct {
-	key   string
-	value string
-}
-
-var generalHeaders = [...]header{
-	{"Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"},
-	{"Accept-Language", "zh-CN,zh;q=0.9"},
-	{"Connection", "keep-alive"},
-	{"User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.159 Safari/537.36"},
+var generalHeaders = http.Header{
+	"Accept":          []string{"text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"},
+	"Accept-Language": []string{"zh-CN,zh;q=0.9"},
+	"Connection":      []string{"keep-alive"},
+	"User-Agent":      []string{"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/95.0.4638.54 Safari/537.36"},
 }
 
 func postFormWithContext(ctx context.Context, url string, data url.Values) (*http.Request, error) {
@@ -29,7 +25,7 @@ func postFormWithContext(ctx context.Context, url string, data url.Values) (*htt
 	if err != nil {
 		return nil, err
 	}
-	setGeneralHeader(req)
+	req.Header = generalHeaders.Clone()
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	return req, err
 }
@@ -43,7 +39,7 @@ func getWithContext(ctx context.Context, url string) (*http.Request, error) {
 	if err != nil {
 		return nil, err
 	}
-	setGeneralHeader(req)
+	req.Header = generalHeaders.Clone()
 	return req, err
 }
 
@@ -67,8 +63,7 @@ func scanLine(reader *bufio.Reader) (string, error) {
 	return res, err
 }
 
-func setGeneralHeader(req *http.Request) {
-	for i := range generalHeaders {
-		req.Header.Set(generalHeaders[i].key, generalHeaders[i].value)
-	}
+func drainBody(body io.ReadCloser) {
+	io.Copy(io.Discard, body)
+	body.Close()
 }

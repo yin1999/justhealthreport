@@ -29,7 +29,7 @@ func getFormData(ctx context.Context, jar customCookieJar) (form *HealthForm, er
 		return
 	}
 
-	defer res.Body.Close()
+	defer drainBody(res.Body)
 
 	reader := bufio.NewReader(res.Body)
 
@@ -90,7 +90,7 @@ func postForm(ctx context.Context, jar http.CookieJar, form *HealthForm) error {
 	if err != nil {
 		return err
 	}
-	setGeneralHeader(req)
+	req.Header = generalHeaders.Clone()
 	req.Header.Set("Content-Type", "text/json")
 
 	client := &http.Client{Jar: jar}

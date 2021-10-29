@@ -10,11 +10,12 @@
 
 目前，**最新版本**具有以下特性:
 
-    1. 每日自动打卡
-    2. 一次打卡失败，自动重新尝试，可设置最大打卡尝试次数以及重新打卡的等待时间
-    3. 日志同步输出到Stderr以及log文件
-    4. 版本查询
-    5. 打卡失败邮件通知推送功能(目前支持STARTTLS/TLS端口+PlainAuth登录到SMTP服务器)
+	1. 每日自动打卡
+	2. 一次打卡失败，自动重新尝试，可设置最大打卡尝试次数以及重新打卡的等待时间
+	3. 日志同步输出到Stderr
+	4. 版本查询
+	5. 打卡失败邮件通知推送功能(目前支持STARTTLS/TLS端口+PlainAuth登录到SMTP服务器)
+	6. 通过环境变量设置http代理(HTTP_PROXY/HTTPS_PROXY均需设置)
 
 ### 安装步骤
 
@@ -51,45 +52,30 @@
 
 ## 使用说明
 
-### linux
+### Linux/Windows
 
-1. 安装 screen
-
-	```bash
-	sudo yum install screen  # CentOS
-	sudo apt install screen  # Debian/Ubuntu
-	```
-
-2. 授予可执行权限(`源码编译`的可以跳过此步)
+1. 授予可执行权限(`源码编译`的可以跳过此步)
 
 	```bash
 	chmod +x justhealthreport
 	```
 
-3. 运行
-
-	通过screen进行shell管理，可通过[菜鸟教程](https://www.runoob.com/linux/linux-comm-screen.html)学习相关命令
+2. 运行
 
 	```bash
-	screen ./justhealthreport
+	# example(set punch time as 9:52)
+	./justhealthreport -u username -p password -t 9:52 -save
+	# -save: 保存账户信息至文件，第二次启动程序时可不设置用户名、密码两个参数（仅使用: ./healthreport -t 9:52）
 	```
 
-**请使用ctrl+a+d退出screen进程，ctrl+c是用来终止程序的**
-
-### Windows
-
-命令行中执行
-
-```cmd
-.\justhealthreport
-```
+	**Linux**用户可使用[systemd](https://systemd.io/)(`recommend`，支持配置开机自启，配置模板：`_script/justhealthreport.service`)或者[screen](https://www.gnu.org/software/screen/)管理打卡进程
 
 ### 邮件通知
 
-1. 复制**email-template.json**命名为**email.json**
+1. 生成**email.json**
 
 	```bash
-	cp email-template.json email.json  # Linux命令
+	./justhealthreport -g  # 可使用 '-email' 指定配置文件生成目录
 	```
 
 2. 修改**email.json**中的的配置，具体说明如下:
@@ -118,12 +104,6 @@
 
 	```bash
 	./justhealthreport -h
-	```
-
-3. 验证SMTP服务
-
-	```bash
-	./justhealthreport -c
 	```
 
 4. 版本更新

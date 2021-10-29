@@ -62,3 +62,12 @@ type CookieNotFoundErr struct {
 func (t CookieNotFoundErr) Error() string {
 	return fmt.Sprintf("http: can't find cookie: %s", t.cookie)
 }
+
+type Account struct {
+	Username string
+	Password string
+}
+
+func (a Account) Name() string {
+	return a.Username
+}
