@@ -2,10 +2,9 @@ name: GoCodeCheck
 
 on:
   push:
-    branches: [ master ]
+    branches: [ main ]
     paths-ignore:
     - '.**'
-    - 'email-template.json'
     - 'LICENSE'
     - 'Makefile'
     - 'README.md'
