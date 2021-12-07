@@ -99,7 +99,7 @@ func postForm(ctx context.Context, jar http.CookieJar, form *HealthForm) error {
 	if res, err = client.Do(req); err != nil {
 		return err
 	}
-	defer res.Body.Close()
+	defer drainBody(res.Body)
 
 	r := &response{}
 

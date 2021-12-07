@@ -1,7 +1,5 @@
 package httpclient
 
-import "fmt"
-
 // HealthForm form data
 type HealthForm struct {
 	Form Entity `json:"entity"`
@@ -60,7 +58,7 @@ type CookieNotFoundErr struct {
 }
 
 func (t CookieNotFoundErr) Error() string {
-	return fmt.Sprintf("http: can't find cookie: %s", t.cookie)
+	return "http: can't find cookie: " + t.cookie
 }
 
 type Account struct {

@@ -52,6 +52,6 @@ func (j cookieJar) GetCookieByDomain(domain string) (res []*http.Cookie) {
 }
 
 // Cookies get cookie by domains
-func (j *cookieJar) Cookies(u *url.URL) []*http.Cookie {
+func (j cookieJar) Cookies(u *url.URL) []*http.Cookie {
 	return j.GetCookieByDomain(u.Hostname())
 }
