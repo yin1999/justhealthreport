@@ -4,5 +4,5 @@ go 1.17
 
 require (
 	github.com/google/go-querystring v1.1.0
-	github.com/yin1999/healthreport v1.1.2
+	github.com/yin1999/healthreport v1.1.3
 )
