@@ -8,7 +8,6 @@ import (
 
 type customCookieJar interface {
 	http.CookieJar
-	GetCookieByDomain(domain string) []*http.Cookie
 	GetCookieByName(name string) []*http.Cookie
 }
 
@@ -41,17 +40,13 @@ func (j *cookieJar) SetCookies(u *url.URL, cookies []*http.Cookie) {
 	}
 }
 
-// GetCookieByDomain use domain as filter to get cookies
-func (j cookieJar) GetCookieByDomain(domain string) (res []*http.Cookie) {
+// Cookies use domain as filter to get cookies
+func (j cookieJar) Cookies(u *url.URL) (res []*http.Cookie) {
+	host := u.Hostname()
 	for i := range j.cookies {
-		if strings.HasSuffix(domain, j.cookies[i].Domain) {
+		if strings.HasSuffix(host, j.cookies[i].Domain) {
 			res = append(res, j.cookies[i])
 		}
 	}
 	return
-}
-
-// Cookies get cookie by domains
-func (j cookieJar) Cookies(u *url.URL) []*http.Cookie {
-	return j.GetCookieByDomain(u.Hostname())
 }

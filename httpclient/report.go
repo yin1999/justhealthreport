@@ -42,8 +42,8 @@ func getFormData(ctx context.Context, jar customCookieJar) (form *HealthForm, er
 	form = &HealthForm{
 		Form: Entity{
 			Time:                 time.Now().In(timeZone).Format("2006-01-02 15:04"),
-			MorningTemperature:   fmt.Sprintf("%.1f", randomNumberGen.Float32()+36),
-			LastNightTemperature: fmt.Sprintf("%.1f", randomNumberGen.Float32()+36),
+			MorningTemperature:   fmt.Sprintf("36.%d", randomNumberGen.Int31n(10)),
+			LastNightTemperature: fmt.Sprintf("36.%d", randomNumberGen.Int31n(10)),
 			Ext:                  "{}", // default
 		},
 	}
